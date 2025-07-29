@@ -5,13 +5,13 @@ from PIL import Image
 import torch
 import re
 
-# Load model & processor
+# Load model & processor (same as before)
 processor = AutoProcessor.from_pretrained("JackChew/Qwen2-VL-2B-OCR")
 model = AutoModelForImageTextToText.from_pretrained("JackChew/Qwen2-VL-2B-OCR").to(
     torch.device("cuda" if torch.cuda.is_available() else "cpu")
 )
 
-# OCR function
+# OCR function (same as before)
 def ocr_image(image, prompt_text):
     conversation = [{
         "role": "user",
@@ -28,7 +28,7 @@ def extract_title_from_text(full_text, debug_filename=""):
     lines = [line.strip() for line in full_text.split('\n') if line.strip()]
     
     if debug_filename:
-        print(f"\nDebug - Analyzing {debug_filename}:")
+        print(f"\nDebug - Re-analyzing {debug_filename}:")
         for i, line in enumerate(lines[:10]):
             print(f"  {i}: '{line}'")
     
@@ -118,61 +118,97 @@ def clean_poem_text(text, title):
     
     return '\n'.join(cleaned_lines).strip()
 
-# Process all images
+# Load existing results
+with open("ocr_output.json", "r", encoding="utf-8") as f:
+    ocr_results = json.load(f)
+
+# Find untitled poems
+untitled_poems = [poem for poem in ocr_results if poem["title"].lower() == "untitled"]
+
+if not untitled_poems:
+    print("No untitled poems found to reprocess!")
+    exit()
+
+print(f"Found {len(untitled_poems)} untitled poems to reprocess:")
+for poem in untitled_poems:
+    if "pages" in poem:
+        print(f"  - {poem['pages']}")
+    else:
+        print(f"  - {poem['filename']}")
+
+# Ask user for confirmation
+response = input(f"\nReprocess these {len(untitled_poems)} poems? (y/n): ")
+if response.lower() != 'y':
+    print("Cancelled.")
+    exit()
+
+# Reprocess untitled poems
 image_folder = "img"
-poems = {}  # Dictionary to group continuation pages
+updated_count = 0
 
-for filename in sorted(os.listdir(image_folder)):
-    if filename.lower().endswith((".jpg", ".jpeg", ".png")):
+for i, poem in enumerate(untitled_poems):
+    # Get the filename(s) for this poem
+    if "pages" in poem:
+        filenames = poem["pages"]
+    else:
+        filenames = [poem["filename"]]
+    
+    print(f"\nReprocessing poem {i+1}/{len(untitled_poems)}: {filenames}")
+    
+    # Process each page of this poem
+    combined_text = ""
+    for filename in filenames:
         path = os.path.join(image_folder, filename)
-        img = Image.open(path)
-        
-        print(f"\nProcessing {filename}...")
-        
-        # Full OCR with better prompt
-        poem_text = ocr_image(img, "Transcribe all text from this document exactly as written, preserving line breaks and spacing.")
-        
-        # Extract title using smart heuristics
-        title = extract_title_from_text(poem_text, filename)
-        
-        # Check if this is a continuation page
-        is_continuation = "(continued)" in poem_text.lower() or "(cont" in poem_text.lower()
-        
-        if is_continuation and poems:
-            # Find the most recent poem to continue
-            last_poem_key = list(poems.keys())[-1]
-            poems[last_poem_key]["text"] += "\n\n" + clean_poem_text(poem_text, title)
-            poems[last_poem_key]["pages"].append(filename)
-            print(f"  -> Continuation of '{last_poem_key}'")
-        else:
-            # New poem or first page
-            clean_text = clean_poem_text(poem_text, title)
+        if os.path.exists(path):
+            img = Image.open(path)
             
-            if title in poems:
-                # Same title, merge content
-                poems[title]["text"] += "\n\n" + clean_text
-                poems[title]["pages"].append(filename)
+            # Try with different prompts for better results
+            prompts = [
+                "Transcribe all text from this document exactly as written, preserving line breaks and spacing.",
+                "Read all the text in this image carefully, including the title at the top.",
+                "Extract all visible text from this page, maintaining the original formatting."
+            ]
+            
+            best_text = ""
+            for prompt in prompts:
+                try:
+                    text = ocr_image(img, prompt)
+                    if len(text) > len(best_text):  # Use the longest result
+                        best_text = text
+                except Exception as e:
+                    print(f"    Error with prompt: {e}")
+                    continue
+            
+            if best_text:
+                combined_text += best_text + "\n\n"
             else:
-                # Brand new poem
-                poems[title] = {
-                    "title": title,
-                    "text": clean_text,
-                    "pages": [filename]
-                }
-            print(f"  -> Title: '{title}'")
+                print(f"    Failed to OCR {filename}")
+    
+    if combined_text.strip():
+        # Extract new title
+        new_title = extract_title_from_text(combined_text, filenames[0])
+        
+        if new_title != "Untitled":
+            # Update the poem in our results
+            poem["title"] = new_title
+            poem["text"] = clean_poem_text(combined_text, new_title)
+            updated_count += 1
+            print(f"    ✓ Updated title to: '{new_title}'")
+        else:
+            print(f"    ✗ Still couldn't extract title")
+    else:
+        print(f"    ✗ No text extracted")
 
-# Convert to list format for JSON output
-ocr_results = []
-for poem_data in poems.values():
-    ocr_results.append({
-        "filename": poem_data["pages"][0],  # First page filename
-        "title": poem_data["title"],
-        "text": poem_data["text"],
-        "pages": poem_data["pages"]  # All pages for this poem
-    })
+# Save updated results
+if updated_count > 0:
+    with open("ocr_output.json", "w", encoding="utf-8") as f:
+        json.dump(ocr_results, f, ensure_ascii=False, indent=2)
+    print(f"\n✓ Successfully updated {updated_count} poems!")
+    print("Updated ocr_output.json with new titles.")
+else:
+    print("\n✗ No poems were successfully updated.")
 
-# Save to disk
-with open("ocr_output.json", "w", encoding="utf-8") as f:
-    json.dump(ocr_results, f, ensure_ascii=False, indent=2)
-
-print(f"\nOCR complete! Processed {len(ocr_results)} poems and saved to ocr_output.json")
+print(f"\nSummary:")
+print(f"  - Attempted to reprocess: {len(untitled_poems)}")
+print(f"  - Successfully updated: {updated_count}")
+print(f"  - Still untitled: {len(untitled_poems) - updated_count}")
