@@ -122,82 +122,148 @@ def clean_poem_text(text, title):
 with open("ocr_output.json", "r", encoding="utf-8") as f:
     ocr_results = json.load(f)
 
-# Find untitled poems
-untitled_poems = [poem for poem in ocr_results if poem["title"].lower() == "untitled"]
+# Find untitled poems and separate individual files
+untitled_files = []
+untitled_poem_indices = []
 
-if not untitled_poems:
+for i, poem in enumerate(ocr_results):
+    if poem["title"].lower() == "untitled":
+        if "pages" in poem and isinstance(poem["pages"], list):
+            # This poem has multiple pages - process each separately
+            for page_file in poem["pages"]:
+                untitled_files.append(page_file)
+                untitled_poem_indices.append(i)
+        else:
+            # Single page poem
+            filename = poem.get("filename") or poem.get("pages", ["unknown"])[0]
+            untitled_files.append(filename)
+            untitled_poem_indices.append(i)
+
+if not untitled_files:
     print("No untitled poems found to reprocess!")
     exit()
 
-print(f"Found {len(untitled_poems)} untitled poems to reprocess:")
-for poem in untitled_poems:
-    if "pages" in poem:
-        print(f"  - {poem['pages']}")
-    else:
-        print(f"  - {poem['filename']}")
+print(f"Found {len(untitled_files)} untitled poem pages to reprocess:")
+for filename in untitled_files:
+    print(f"  - {filename}")
 
 # Ask user for confirmation
-response = input(f"\nReprocess these {len(untitled_poems)} poems? (y/n): ")
+response = input(f"\nReprocess these {len(untitled_files)} poem pages individually? (y/n): ")
 if response.lower() != 'y':
     print("Cancelled.")
     exit()
 
-# Reprocess untitled poems
+# Reprocess each untitled file individually
 image_folder = "img"
 updated_count = 0
 
-for i, poem in enumerate(untitled_poems):
-    # Get the filename(s) for this poem
-    if "pages" in poem:
-        filenames = poem["pages"]
-    else:
-        filenames = [poem["filename"]]
+for i, (filename, poem_index) in enumerate(zip(untitled_files, untitled_poem_indices)):
+    print(f"\nReprocessing file {i+1}/{len(untitled_files)}: {filename}")
     
-    print(f"\nReprocessing poem {i+1}/{len(untitled_poems)}: {filenames}")
-    
-    # Process each page of this poem
-    combined_text = ""
-    for filename in filenames:
-        path = os.path.join(image_folder, filename)
-        if os.path.exists(path):
-            img = Image.open(path)
-            
-            # Try with different prompts for better results
-            prompts = [
-                "Transcribe all text from this document exactly as written, preserving line breaks and spacing.",
-                "Read all the text in this image carefully, including the title at the top.",
-                "Extract all visible text from this page, maintaining the original formatting."
-            ]
-            
-            best_text = ""
-            for prompt in prompts:
-                try:
-                    text = ocr_image(img, prompt)
-                    if len(text) > len(best_text):  # Use the longest result
-                        best_text = text
-                except Exception as e:
-                    print(f"    Error with prompt: {e}")
-                    continue
-            
-            if best_text:
-                combined_text += best_text + "\n\n"
-            else:
-                print(f"    Failed to OCR {filename}")
-    
-    if combined_text.strip():
-        # Extract new title
-        new_title = extract_title_from_text(combined_text, filenames[0])
+    path = os.path.join(image_folder, filename)
+    if not os.path.exists(path):
+        print(f"    ✗ File not found: {path}")
+        continue
         
-        if new_title != "Untitled":
-            # Update the poem in our results
-            poem["title"] = new_title
-            poem["text"] = clean_poem_text(combined_text, new_title)
-            updated_count += 1
-            print(f"    ✓ Updated title to: '{new_title}'")
-        else:
-            print(f"    ✗ Still couldn't extract title")
+    img = Image.open(path)
+    
+    # Try with different prompts for better results
+    prompts = [
+        "Transcribe all text from this document exactly as written, preserving line breaks and spacing.",
+        "Read all the text in this image carefully, including the title at the top.",
+        "Extract all visible text from this page, maintaining the original formatting."
+    ]
+    
+    best_text = ""
+    for prompt in prompts:
+        try:
+            text = ocr_image(img, prompt)
+            if len(text) > len(best_text):  # Use the longest result
+                best_text = text
+        except Exception as e:
+            print(f"    Error with prompt: {e}")
+            continue
+    
+    if not best_text.strip():
+        print(f"    ✗ No text extracted from {filename}")
+        continue
+    
+    # Extract new title
+    new_title = extract_title_from_text(best_text, filename)
+    
+    if new_title != "Untitled":
+        # Create a new poem entry for this file
+        new_poem = {
+            "filename": filename,
+            "title": new_title,
+            "text": clean_poem_text(best_text, new_title),
+            "pages": [filename]
+        }
+        
+        # Replace the old untitled entry or add new one
+        if poem_index < len(ocr_results):
+            # Check if this was part of a multi-page untitled poem
+            old_poem = ocr_results[poem_index]
+            if "pages" in old_poem and len(old_poem["pages"]) > 1:
+                # Remove this file from the old poem's pages
+                old_poem["pages"] = [p for p in old_poem["pages"] if p != filename]
+                if not old_poem["pages"]:
+                    # If no pages left, mark for removal
+                    old_poem["_to_remove"] = True
+                # Add as new separate poem
+                ocr_results.append(new_poem)
+            else:
+                # Replace the single untitled poem
+                ocr_results[poem_index] = new_poem
+        
+        updated_count += 1
+        print(f"    ✓ Updated title to: '{new_title}'")
     else:
-        print(f"    ✗ No text extracted")
+        print(f"    ✗ Still couldn't extract title from {filename}")
+        print(f"    First few lines of extracted text:")
+        lines = best_text.split('\n')[:5]
+        for j, line in enumerate(lines):
+            if line.strip():
+                print(f"      {j+1}: {line.strip()}")
+        
+        # Offer manual title entry
+        print(f"\n    Options for {filename}:")
+        print("    1. Enter title manually")
+        print("    2. Skip this file (leave as 'Untitled')")
+        
+        choice = input("    Choose (1 or 2): ").strip()
+        
+        if choice == "1":
+            manual_title = input("    Enter the poem title: ").strip()
+            if manual_title:
+                # Create poem with manual title
+                new_poem = {
+                    "filename": filename,
+                    "title": manual_title,
+                    "text": clean_poem_text(best_text, manual_title),
+                    "pages": [filename]
+                }
+                
+                # Replace the old untitled entry or add new one
+                if poem_index < len(ocr_results):
+                    old_poem = ocr_results[poem_index]
+                    if "pages" in old_poem and len(old_poem["pages"]) > 1:
+                        old_poem["pages"] = [p for p in old_poem["pages"] if p != filename] 
+                        if not old_poem["pages"]:
+                            old_poem["_to_remove"] = True
+                        ocr_results.append(new_poem)
+                    else:
+                        ocr_results[poem_index] = new_poem
+                
+                updated_count += 1
+                print(f"    ✓ Manually set title to: '{manual_title}'")
+            else:
+                print(f"    ✗ No title entered, leaving as 'Untitled'")
+        else:
+            print(f"    ✗ Skipping {filename}, leaving as 'Untitled'")
+
+# Remove any poems marked for removal
+ocr_results = [poem for poem in ocr_results if not poem.get("_to_remove", False)]
 
 # Save updated results
 if updated_count > 0:
