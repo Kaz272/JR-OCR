@@ -27,226 +27,203 @@ def clean_text_for_latex(text):
     
     return text
 
-def format_poem_text(text):
-    """Format poem text with proper line breaks for LaTeX verse environment"""
+def find_longest_line(text):
+    """Find the longest line in the poem for verse centering"""
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    if not lines:
+        return "Default line for centering"
+    
+    # Find the longest line by character count
+    longest_line = max(lines, key=len)
+    
+    # Clean it for LaTeX (but keep original length characteristics)
+    cleaned_longest = clean_text_for_latex(longest_line)
+    
+    return cleaned_longest
+
+def format_poem_text_simple(text):
+    """Simple poem text formatting for verse environment"""
     lines = text.split('\n')
     formatted_lines = []
     
-    i = 0
-    while i < len(lines):
-        line = lines[i].strip()
-        cleaned_line = clean_text_for_latex(line)
-        
-        if cleaned_line:
-            # Check if next line is empty (indicates stanza break)
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if line:
+            cleaned_line = clean_text_for_latex(line)
+            # Check if next line is empty (stanza break)
             if i + 1 < len(lines) and not lines[i + 1].strip():
-                formatted_lines.append(cleaned_line + r' \\!')  # Stanza break
-                i += 2  # Skip the empty line
+                formatted_lines.append(cleaned_line + " \\\\!")  # Stanza break
             else:
-                formatted_lines.append(cleaned_line + r' \\')   # Regular line break
-                i += 1
-        else:
-            # Empty line - check if we should add stanza break
-            if formatted_lines and not formatted_lines[-1].endswith(r'\\!'):
-                # Convert last line to stanza break if it wasn't already
-                if formatted_lines[-1].endswith(r' \\'):
-                    formatted_lines[-1] = formatted_lines[-1][:-3] + r' \\!'
-            i += 1
+                formatted_lines.append(cleaned_line + " \\\\")   # Regular line break
     
-    # Clean up the last line (remove trailing \\)
-    if formatted_lines and formatted_lines[-1].endswith(r' \\'):
-        formatted_lines[-1] = formatted_lines[-1][:-3] + r' \\'
+    # Clean up the last line
+    if formatted_lines and formatted_lines[-1].endswith(" \\\\"):
+        formatted_lines[-1] = formatted_lines[-1][:-3]
     
     return '\n'.join(formatted_lines)
 
-def generate_latex_document(pages):
-    """Generate the complete LaTeX document"""
+def generate_advanced_latex_document(pages):
+    """Generate LaTeX document with advanced poetry formatting"""
     
     latex_content = []
     
-    # Document header
-    latex_content.append(r'\documentclass[12pt,letterpaper]{book}')
-    latex_content.append(r'\usepackage[utf8]{inputenc}')
-    latex_content.append(r'\usepackage[T1]{fontenc}')
-    latex_content.append(r'\usepackage{graphicx}')
-    latex_content.append(r'\usepackage{geometry}')
-    latex_content.append(r'\usepackage{fancyhdr}')
-    latex_content.append(r'\usepackage{titletoc}')
-    latex_content.append(r'\usepackage{verse} % For poem formatting')
-    latex_content.append(r'\usepackage{ebgaramond}')
-    latex_content.append('')
-    latex_content.append(r'\geometry{margin=1in}')
-    latex_content.append(r'\setboolean{includeimages}{false}')
-    
-    # Page geometry
-    latex_content.append(r'\newboolean{includeimages}')
-    latex_content.append(r'\graphicspath{{img/}}')
-    latex_content.append('')
-    
-    # Custom commands
-    latex_content.append('')
-    latex_content.append(r'% Image label command')
-    latex_content.append(r'\newcommand{\\maybeincludegraphics}[2]{%')
-    latex_content.append(r'	\ifthenelse{\boolean{includeimages}}{')
-    latex_content.append(r'		\includegraphics[#1]{#2}%')
-    latex_content.append(r'	}{}')
-    latex_content.append(r'}')
-    latex_content.append('')
+    # Document header with memoir class and reliable poetry packages
+    latex_content.extend([
+        r'\documentclass[16pt,letterpaper,oneside]{memoir}',
+        r'\usepackage{fontspec}',   # For XeLaTeX/LuaLaTeX font handling
+        r'\usepackage{verse}',      # Standard verse environment
+        r'\usepackage{xcolor}',     # For colors
+        r'\usepackage{microtype}',  # Better typography
+        r'\usepackage{titlesec}',   # For custom section formatting
+        '',
+        r'\setmainfont{EB Garamond}     % Elegant serif',
+       
+        '',
+        r'% Page geometry and styling',
+        r'\settrimmedsize{11in}{8.5in}{*}',
+        r'\setlength{\trimtop}{0pt}',
+        r'\setlength{\trimedge}{\stockwidth}',
+        r'\addtolength{\trimedge}{-\paperwidth}',
+        r'\settypeblocksize{7.5in}{5.5in}{*}',
+        r'\setulmargins{1.5in}{*}{*}',
+        r'\setlrmargins{1.25in}{*}{*}',
+        r'\setheadfoot{\onelineskip}{2\onelineskip}',
+        r'\setheaderspaces{*}{2\onelineskip}{*}',
+        r'\checkandfixthelayout',
+        '',
+        r'% Poetry-specific settings',
+        r'\setlength{\vindent}{2em}',        # Verse indentation
+        r'\setlength{\vleftskip}{2em}',      # Left margin for verses
+        r'\setlength{\stanzaskip}{1em}',     # Space between stanzas
+        '',
+        r'% Custom poetry environments - altverse for alternating indentation',
+        r'\newenvironment{poemblock}',
+        r'  {\begin{verse}\centering}',
+        r'  {\end{verse}}',
+        '',
+        r'% Page styles',
+        r'\makepagestyle{poetry}',
+        r'\makeevenhead{poetry}{\thepage}{}{\itshape The Poetry of Frederick A. Thayer Jr.}',
+        r'\makeoddhead{poetry}{\itshape The Poetry of Frederick A. Thayer Jr.}{}{\thepage}',
+        r'\pagestyle{poetry}',
+        '',
+        r'\renewcommand{\poemtitlefont}{\Huge\itshape\bfseries\centering}',
+        ''
+    ])
     
     # Begin document
-    latex_content.append(r'\begin{document}')
-    latex_content.append('')
+    latex_content.extend([
+        r'\begin{document}',
+        '',
+        r'% Title page',
+        r'\begin{center}',
+        r'\vspace*{2cm}',
+        '{\\Huge\\bfseries The Poetry of Frederick A. Thayer Jr.}\\\\[2cm]',
+        '{\\large Compiled by Frederick A. Thayer V}\\\\[1cm]',
+        r'\vspace*{2cm}',
+        r'\end{center}',
+        r'\thispagestyle{empty}',
+        r'\newpage',
+        '',
+        r'% Table of contents',
+        r'\tableofcontents*',
+        r'\newpage',
+        ''
+    ])
     
-    # Title page
-    latex_content.append(r'\title{Junior''s Poems}')
-    latex_content.append(r'\author{}')
-    latex_content.append(r'\date{}')
-    latex_content.append(r'\maketitle')
-    latex_content.append('')
-    
-    # Table of contents
-    latex_content.append(r'\tableofcontents')
-    latex_content.append(r'\newpage')
-    latex_content.append('')
-    
-    # Generate poems
+    # Generate poems with advanced formatting
     for i, page in enumerate(pages):
         # Handle different data structures
         if isinstance(page, dict):
-            # Dictionary format
             cleaned_title = clean_text_for_latex(page.get("title", f"Poem {i+1}"))
             poem_text = page.get("text", "")
-            
-            # Get image files
-            image_files = []
-            if "pages" in page and page["pages"]:
-                image_files = page["pages"]
-            elif "filename" in page:
-                image_files = [page["filename"]]
         else:
-            # Handle other formats
             print(f"Warning: Unexpected page format at index {i}: {type(page)}")
             cleaned_title = f"Poem {i+1}"
             poem_text = str(page) if page else ""
-            image_files = []
         
-        # Determine if this should be a chapter or just a poem title
-        # For the first two poems, use \poemtitle, for the rest use \chapter
-        if i < 2:
-            latex_content.append(f'% === Poem {i+1} ===')
-            latex_content.append(f'\\poemtitle{{{cleaned_title}}}')
-        else:
-            latex_content.append(f'\\chapter{{{cleaned_title}}}')
-        latex_content.append('')
+        # Add poem to document - use poemtitle and poemtoc from verse package
+        latex_content.append(f'% === Poem {i+1}: {cleaned_title} ===')
         
-        # Poem text in verse environment
+        # Format poem text with proper centering
         if poem_text.strip():
-            latex_content.append(r'\begin{verse}')
-            formatted_text = format_poem_text(poem_text)
+            # Find longest line for centering
+            longest_line = find_longest_line(poem_text)
+            formatted_text = format_poem_text_simple(poem_text)
+            
+            # Set verse width and add poem title
+            latex_content.append(f'\\settowidth{{\\versewidth}}{{{longest_line}}}')
+            latex_content.append(f'\\poemtitle{{{cleaned_title}}}')
+            latex_content.append('')
+            
+            # Use verse with proper width
+            latex_content.append(r'\begin{verse}[\versewidth]')
+            latex_content.append(r'	\LARGE')
             latex_content.append(formatted_text)
             latex_content.append(r'\end{verse}')
+            
             latex_content.append('')
         
-        latex_content.append(r'\vspace{1cm}')
+        # Add spacing
+        latex_content.append(r'\vspace{2cm}')
         latex_content.append('')
         
-        # Add scanned images
-        for image_file in image_files:
-            if image_file:
-                
-                latex_content.append('')
-                latex_content.append(r'\begin{center}')
-                # Remove file extension for includegraphics (LaTeX will find the right format)
-                image_name_no_ext = os.path.splitext(image_file)[0]
-                latex_content.append(f'\\maybeincludegraphics[width=0.8\\textwidth,height=0.7\\textheight,keepaspectratio]{{{image_name_no_ext}}}')
-                latex_content.append(r'\end{center}')
-                latex_content.append('')
-                latex_content.append(r'\vspace{1cm}')
-                latex_content.append('')
-        
-        # Add page break between poems (except for the last one)
+        # Page break between poems (except last)
         if i < len(pages) - 1:
-            latex_content.append(r'\newpage')
-            latex_content.append('')
+            latex_content.extend([r'\newpage', ''])
     
     # End document
     latex_content.append(r'\end{document}')
     
     return '\n'.join(latex_content)
 
-# Load saved OCR results
-with open("ocr_output.json", "r", encoding="utf-8") as f:
-    pages = json.load(f)
-
-# Debug: Check the structure of the data
-print("Data structure check:")
-print(f"Type of pages: {type(pages)}")
-if pages:
-    print(f"Type of first item: {type(pages[0])}")
-    print(f"First item: {pages[0]}")
-
-# Sort poems by lowest filename number
-def get_lowest_filename_number(poem):
-    """Extract the lowest number from the poem's filenames"""
-    # Handle different data structures
-    if isinstance(poem, dict):
-        # Dictionary format
-        filenames = poem.get("pages", [poem.get("filename", "999.jpg")])
-    elif isinstance(poem, list):
-        # List format - assume it contains filename info
-        filenames = poem if poem else ["999.jpg"]
-    else:
-        # Unknown format
-        print(f"Warning: Unknown poem format: {type(poem)}")
-        return 999
+# Main execution
+if __name__ == "__main__":
+    # Load saved OCR results
+    try:
+        with open("ocr_output.json", "r", encoding="utf-8") as f:
+            pages = json.load(f)
+    except FileNotFoundError:
+        print("Error: ocr_output.json not found. Creating sample data for testing.")
+        pages = [
+            {
+                "title": "Sample Poem",
+                "text": "Roses are red\nViolets are blue\nThis is a test\nJust for you",
+                "pages": ["01.jpg"]
+            }
+        ]
     
-    numbers = []
-    for filename in filenames:
-        if isinstance(filename, str):
-            # Extract number from filename (e.g., "07.JPG" -> 7)
-            match = re.search(r'(\d+)', filename)
-            if match:
-                numbers.append(int(match.group(1)))
-    return min(numbers) if numbers else 999
-
-pages.sort(key=get_lowest_filename_number)
-
-# Generate LaTeX content
-latex_document = generate_latex_document(pages)
-
-# Write to file
-with open("juniors_poems.tex", "w", encoding="utf-8") as f:
-    f.write(latex_document)
-
-print("LaTeX file generated successfully: juniors_poems.tex")
-print("\nTo compile to PDF, run:")
-print("pdflatex juniors_poems.tex")
-print("(You may need to run it twice for proper table of contents)")
-
-# Optional: Also save a compilation script
-compilation_script = """#!/bin/bash
-# Compilation script for juniors_poems.tex
-echo "Compiling LaTeX document..."
-pdflatex juniors_poems.tex
-pdflatex juniors_poems.tex  # Run twice for TOC
-echo "Done! Check juniors_poems.pdf"
-"""
-
-with open("compile.sh", "w") as f:
-    f.write(compilation_script)
-
-# Make the script executable (on Unix-like systems)
-try:
-    os.chmod("compile.sh", 0o755)
-    print("\nCompilation script created: compile.sh")
-except:
-    print("\nCompilation script created: compile.sh (you may need to make it executable)")
-
-print("\nUpdated features:")
-print("- Uses the verse package for proper poetry formatting")
-print("- Automatic stanza break detection (\\!) for empty lines")
-print("- Proper \\poemtitle command matching your manual formatting")
-print("- \\imagelabel command with consistent styling")
-print("- First two poems use \\poemtitle, rest use \\chapter")
-print("- Images are referenced from the img/ folder")
-print("- Proper verse line breaks (\\) and stanza breaks (\\!)")
+    # Debug info
+    print("Data structure check:")
+    print(f"Type of pages: {type(pages)}")
+    if pages:
+        print(f"Type of first item: {type(pages[0])}")
+        print(f"First item preview: {str(pages[0])[:200]}...")
+    
+    # Sort poems by filename number
+    def get_lowest_filename_number(poem):
+        if isinstance(poem, dict):
+            filenames = poem.get("pages", [poem.get("filename", "999.jpg")])
+        elif isinstance(poem, list):
+            filenames = poem if poem else ["999.jpg"]
+        else:
+            return 999
+        
+        numbers = []
+        for filename in filenames:
+            if isinstance(filename, str):
+                match = re.search(r'(\d+)', filename)
+                if match:
+                    numbers.append(int(match.group(1)))
+        return min(numbers) if numbers else 999
+    
+    pages.sort(key=get_lowest_filename_number)
+    
+    # Generate main LaTeX document
+    latex_document = generate_advanced_latex_document(pages)
+    
+    # Write main file
+    with open("juniors_poems_advanced.tex", "w", encoding="utf-8") as f:
+        f.write(latex_document)
+    
+    print("Advanced LaTeX file generated: juniors_poems_advanced.tex")
