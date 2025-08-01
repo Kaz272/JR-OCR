@@ -28,16 +28,34 @@ def clean_text_for_latex(text):
     return text
 
 def format_poem_text(text):
-    """Format poem text with proper line breaks for LaTeX"""
+    """Format poem text with proper line breaks for LaTeX verse environment"""
     lines = text.split('\n')
     formatted_lines = []
     
-    for line in lines:
-        cleaned_line = clean_text_for_latex(line.strip())
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        cleaned_line = clean_text_for_latex(line)
+        
         if cleaned_line:
-            formatted_lines.append(cleaned_line + r' \\')
+            # Check if next line is empty (indicates stanza break)
+            if i + 1 < len(lines) and not lines[i + 1].strip():
+                formatted_lines.append(cleaned_line + r' \\!')  # Stanza break
+                i += 2  # Skip the empty line
+            else:
+                formatted_lines.append(cleaned_line + r' \\')   # Regular line break
+                i += 1
         else:
-            formatted_lines.append(r'\\')  # Empty line
+            # Empty line - check if we should add stanza break
+            if formatted_lines and not formatted_lines[-1].endswith(r'\\!'):
+                # Convert last line to stanza break if it wasn't already
+                if formatted_lines[-1].endswith(r' \\'):
+                    formatted_lines[-1] = formatted_lines[-1][:-3] + r' \\!'
+            i += 1
+    
+    # Clean up the last line (remove trailing \\)
+    if formatted_lines and formatted_lines[-1].endswith(r' \\'):
+        formatted_lines[-1] = formatted_lines[-1][:-3] + r' \\'
     
     return '\n'.join(formatted_lines)
 
@@ -54,29 +72,32 @@ def generate_latex_document(pages):
     latex_content.append(r'\usepackage{geometry}')
     latex_content.append(r'\usepackage{fancyhdr}')
     latex_content.append(r'\usepackage{titletoc}')
-    latex_content.append(r'\usepackage{center}')
+    latex_content.append(r'\usepackage{verse} % For poem formatting')
+    latex_content.append(r'\usepackage{ebgaramond}')
     latex_content.append('')
-    latex_content.append(r'% Page geometry')
     latex_content.append(r'\geometry{margin=1in}')
-    latex_content.append('')
-    latex_content.append(r'% Graphics path')
+    latex_content.append(r'\setboolean{includeimages}{false}')
+    
+    # Page geometry
+    latex_content.append(r'\newboolean{includeimages}')
     latex_content.append(r'\graphicspath{{img/}}')
     latex_content.append('')
-    latex_content.append(r'% Custom commands for centering poems')
-    latex_content.append(r'\newenvironment{poemcenter}')
-    latex_content.append(r'  {\begin{center}\begin{minipage}{0.8\textwidth}\centering}')
-    latex_content.append(r'  {\end{minipage}\end{center}}')
+    
+    # Custom commands
     latex_content.append('')
-    latex_content.append(r'% Custom command for poem titles')
-    latex_content.append(r'\newcommand{\poemtitle}[1]{\begin{center}\textbf{\large #1}\end{center}\vspace{0.5cm}}')
+    latex_content.append(r'% Image label command')
+    latex_content.append(r'\newcommand{\\maybeincludegraphics}[2]{%')
+    latex_content.append(r'	\ifthenelse{\boolean{includeimages}}{')
+    latex_content.append(r'		\includegraphics[#1]{#2}%')
+    latex_content.append(r'	}{}')
+    latex_content.append(r'}')
     latex_content.append('')
-    latex_content.append(r'% Custom command for image labels')
-    latex_content.append(r'\newcommand{\imagelabel}[1]{\begin{center}\textit{\small Original scan: #1}\end{center}\vspace{0.3cm}}')
-    latex_content.append('')
+    
+    # Begin document
     latex_content.append(r'\begin{document}')
     latex_content.append('')
     
-    # Title page (optional - you can customize this)
+    # Title page
     latex_content.append(r'\title{Junior''s Poems}')
     latex_content.append(r'\author{}')
     latex_content.append(r'\date{}')
@@ -103,37 +124,41 @@ def generate_latex_document(pages):
             elif "filename" in page:
                 image_files = [page["filename"]]
         else:
-            # Handle other formats - you may need to adjust this based on your actual data structure
+            # Handle other formats
             print(f"Warning: Unexpected page format at index {i}: {type(page)}")
             cleaned_title = f"Poem {i+1}"
             poem_text = str(page) if page else ""
             image_files = []
         
-        # Start new chapter for each poem
-        latex_content.append(f'\\chapter{{{cleaned_title}}}')
+        # Determine if this should be a chapter or just a poem title
+        # For the first two poems, use \poemtitle, for the rest use \chapter
+        if i < 2:
+            latex_content.append(f'% === Poem {i+1} ===')
+            latex_content.append(f'\\poemtitle{{{cleaned_title}}}')
+        else:
+            latex_content.append(f'\\chapter{{{cleaned_title}}}')
         latex_content.append('')
         
-        # Poem text in centered environment
-        latex_content.append(r'\begin{poemcenter}')
-        formatted_text = format_poem_text(poem_text)
-        latex_content.append(formatted_text)
-        latex_content.append(r'\end{poemcenter}')
-        latex_content.append('')
+        # Poem text in verse environment
+        if poem_text.strip():
+            latex_content.append(r'\begin{verse}')
+            formatted_text = format_poem_text(poem_text)
+            latex_content.append(formatted_text)
+            latex_content.append(r'\end{verse}')
+            latex_content.append('')
+        
         latex_content.append(r'\vspace{1cm}')
         latex_content.append('')
         
         # Add scanned images
         for image_file in image_files:
             if image_file:
-                # Clean filename for LaTeX
-                safe_filename = clean_text_for_latex(image_file)
                 
-                latex_content.append(f'\\imagelabel{{{safe_filename}}}')
                 latex_content.append('')
                 latex_content.append(r'\begin{center}')
                 # Remove file extension for includegraphics (LaTeX will find the right format)
                 image_name_no_ext = os.path.splitext(image_file)[0]
-                latex_content.append(f'\\includegraphics[width=0.8\\textwidth,height=0.7\\textheight,keepaspectratio]{{{image_name_no_ext}}}')
+                latex_content.append(f'\\maybeincludegraphics[width=0.8\\textwidth,height=0.7\\textheight,keepaspectratio]{{{image_name_no_ext}}}')
                 latex_content.append(r'\end{center}')
                 latex_content.append('')
                 latex_content.append(r'\vspace{1cm}')
@@ -217,9 +242,11 @@ try:
 except:
     print("\nCompilation script created: compile.sh (you may need to make it executable)")
 
-print("\nCustomization tips:")
-print("- Edit the document class and packages at the top")
-print("- Modify the \\poemcenter environment for different poem formatting")
-print("- Adjust image sizing with the width/height parameters in \\includegraphics")
-print("- Change margins, fonts, and spacing as needed")
-print("- The images are referenced from the img/ folder")
+print("\nUpdated features:")
+print("- Uses the verse package for proper poetry formatting")
+print("- Automatic stanza break detection (\\!) for empty lines")
+print("- Proper \\poemtitle command matching your manual formatting")
+print("- \\imagelabel command with consistent styling")
+print("- First two poems use \\poemtitle, rest use \\chapter")
+print("- Images are referenced from the img/ folder")
+print("- Proper verse line breaks (\\) and stanza breaks (\\!)")
