@@ -76,25 +76,24 @@ def generate_advanced_latex_document(pages):
         r'\usepackage{microtype}',  # Better typography
         r'\usepackage{titlesec}',   # For custom section formatting
         '',
-        r'\setmainfont{EB Garamond}     % Elegant serif',
-       
+        r'\setmainfont{EB Garamond}     % Elegant serif',    
         '',
-        r'% Page geometry and styling',
+         r'% Page geometry and styling',
         r'\settrimmedsize{11in}{8.5in}{*}',
         r'\setlength{\trimtop}{0pt}',
         r'\setlength{\trimedge}{\stockwidth}',
         r'\addtolength{\trimedge}{-\paperwidth}',
-        r'\settypeblocksize{7.5in}{5.5in}{*}',
-        r'\setulmargins{1.5in}{*}{*}',
-        r'\setlrmargins{1.25in}{*}{*}',
+        r'\settypeblocksize{8in}{6.75in}{*}',      # Increased from 7.5in x 5.5in
+        r'\setulmargins{1.25in}{*}{*}',            # Keep top/bottom margins
+        r'\setlrmargins{0.875in}{*}{*}',           # Reduced from 1.25in
         r'\setheadfoot{\onelineskip}{2\onelineskip}',
         r'\setheaderspaces{*}{2\onelineskip}{*}',
         r'\checkandfixthelayout',
         '',
         r'% Poetry-specific settings',
-        r'\setlength{\vindent}{2em}',        # Verse indentation
-        r'\setlength{\vleftskip}{2em}',      # Left margin for verses
-        r'\setlength{\stanzaskip}{1em}',     # Space between stanzas
+        r'\setlength{\vindent}{1em}',              # Reduced from 2em
+        r'\setlength{\vleftskip}{0.5em}',          # Reduced from 2em
+        r'\setlength{\stanzaskip}{1em}',
         '',
         r'% Custom poetry environments - altverse for alternating indentation',
         r'\newenvironment{poemblock}',
@@ -103,11 +102,17 @@ def generate_advanced_latex_document(pages):
         '',
         r'% Page styles',
         r'\makepagestyle{poetry}',
-        r'\makeevenhead{poetry}{\thepage}{}{\itshape The Poetry of Frederick A. Thayer Jr.}',
-        r'\makeoddhead{poetry}{\itshape The Poetry of Frederick A. Thayer Jr.}{}{\thepage}',
+        r'\makeevenhead{poetry}{\fontsize{12}{14}\selectfont\thepage}{}{\fontsize{12}{14}\selectfont\itshape The Poetry of Frederick A. Thayer Jr.}',
+        r'\makeoddhead{poetry}{\fontsize{12}{14}\selectfont\itshape The Poetry of Frederick A. Thayer Jr.}{}{\fontsize{12}{14}\selectfont\thepage}',
         r'\pagestyle{poetry}',
         '',
-        r'\renewcommand{\poemtitlefont}{\Huge\itshape\bfseries\centering}',
+        r'\renewcommand{\poemtitlefont}{\fontsize{24}{26}\selectfont\itshape\bfseries\centering}',
+        '',
+        r'% Table of Contents formatting',
+        r'\renewcommand{\poemtoc}{chapter}',
+        r'\renewcommand{\printtoctitle}[1]{\centering\fontsize{20}{24}\selectfont\bfseries #1\vspace{1em}}',
+        r'\renewcommand{\cftchapterfont}{\fontsize{14}{17}\selectfont\itshape}',
+        r'\renewcommand{\cftchapterpagefont}{\fontsize{14}{17}\selectfont}',
         ''
     ])
     
@@ -153,12 +158,13 @@ def generate_advanced_latex_document(pages):
             
             # Set verse width and add poem title
             latex_content.append(f'\\settowidth{{\\versewidth}}{{{longest_line}}}')
+            latex_content.append(r'\addtolength{\versewidth}{4em}')
             latex_content.append(f'\\poemtitle{{{cleaned_title}}}')
             latex_content.append('')
             
             # Use verse with proper width
             latex_content.append(r'\begin{verse}[\versewidth]')
-            latex_content.append(r'	\LARGE')
+            latex_content.append(r'\fontsize{19}{21}\selectfont')  # 18pt font, 22pt line spacing
             latex_content.append(formatted_text)
             latex_content.append(r'\end{verse}')
             
